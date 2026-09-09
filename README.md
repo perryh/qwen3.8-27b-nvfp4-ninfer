@@ -71,14 +71,19 @@ curl http://localhost:8080/v1/chat/completions \
 generation; wall-clock based, reports tok/s and MTP acceptance (from stderr
 stats when available). Measured results: see table below.
 
-Results from this build on the 5090 (fill in after `bench.py` run):
+Measured 2026-09-09, this build (262K ctx, fp8 KV, MTP3, C=4, `--kv-capacity auto`):
 
 | metric | ninfer (Qwen3.8-27B nvfp4, MTP3) |
 |---|---|
-| decode (prose) | TBD |
-| prefill @ 4K | TBD |
-| prefill @ 32K | TBD |
-| concurrency scaling | TBD |
+| decode (prose, warm, C=1) | **170.3 tok/s** |
+| prefill @ 6.5K | 6,660 tok/s |
+| prefill @ 68K | **5,046 tok/s** |
+| long-ctx gen (68K prompt, 500 out) | ~107 tok/s net |
+
+`--max-concurrency` must be <= 4 at 262K on the 32GB card: C=8 fails startup
+with "minimum Engine runtime reservation requires 11.68 GiB + 1 GiB headroom"
+(only ~11.96 GiB free after weights). Upstream's own long-context example uses
+C=2. Warm the server with one throwaway request before timing.
 
 Reference points on the same machine: ik_llama MTP (Qwen3.8-Flash-Next 125B)
 ~21 tok/s decode / ~300 tok/s prefill; FreeToken (same model) 48 tok/s @ 16K

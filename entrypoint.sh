@@ -7,7 +7,7 @@ HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8080}"
 MAX_CONTEXT="${MAX_CONTEXT:-262144}"
 KV_CAPACITY="${KV_CAPACITY:-auto}"
-MAX_CONCURRENCY="${MAX_CONCURRENCY:-8}"
+MAX_CONCURRENCY="${MAX_CONCURRENCY:-4}"
 KV_DTYPE="${KV_DTYPE:-fp8}"
 EXTRA_ARGS="${EXTRA_ARGS:---device-state-slots 2 --host-state-slots 8 --host-kv-mib 8192 --spec mtp --draft-tokens 3 --lm-head-draft --preserve-thinking}"
 
