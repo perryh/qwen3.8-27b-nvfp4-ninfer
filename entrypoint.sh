@@ -11,7 +11,7 @@ MAX_CONCURRENCY="${MAX_CONCURRENCY:-8}"
 KV_DTYPE="${KV_DTYPE:-fp8}"
 EXTRA_ARGS="${EXTRA_ARGS:---device-state-slots 2 --host-state-slots 8 --host-kv-mib 8192 --spec mtp --draft-tokens 3 --lm-head-draft --preserve-thinking}"
 
-ARGS=(serve "$MODEL_FILE" --host "$HOST" --port "$PORT"
+ARGS=("$MODEL_FILE" --host "$HOST" --port "$PORT"
       --max-context "$MAX_CONTEXT"
       --kv-capacity "$KV_CAPACITY"
       --max-concurrency "$MAX_CONCURRENCY"
