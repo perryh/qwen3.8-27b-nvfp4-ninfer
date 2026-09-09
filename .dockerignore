@@ -1,0 +1,8 @@
+ninfer-src
+*.o
+*.so
+.env
+bench_results.json
+runs/
+data/
+__pycache__/

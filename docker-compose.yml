@@ -1,0 +1,27 @@
+services:
+  ninfer:
+    build:
+      context: .
+    image: ninfer-qwen38-27b-nvfp4:latest
+    container_name: ninfer
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - MODEL_FILE=${MODEL_FILE:-/models/qwen3_8_27b_nvfp4.ninfer}
+      - PORT=8080
+      - HOST=0.0.0.0
+      - MAX_CONTEXT=${MAX_CONTEXT:-262144}
+      - KV_CAPACITY=${KV_CAPACITY:-auto}
+      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-8}
+      - KV_DTYPE=${KV_DTYPE:-fp8}
+      - EXTRA_ARGS=${EXTRA_ARGS:---device-state-slots 2 --host-state-slots 8 --host-kv-mib 8192 --spec mtp --draft-tokens 3 --lm-head-draft --preserve-thinking}
+    volumes:
+      - "${MODEL_DIR:-/home/perryh/git/ninfer/models}:/models:ro,Z"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
