@@ -71,7 +71,7 @@ curl http://localhost:8080/v1/chat/completions \
 generation; wall-clock based, reports tok/s and MTP acceptance (from stderr
 stats when available). Measured results: see table below.
 
-Measured 2026-09-09, this build (262K ctx, fp8 KV, MTP3, C=4, `--kv-capacity auto`):
+Measured 2026-09-09, this build (262K ctx, fp8 KV, MTP3, C=4, `--kv-capacity auto`). The GPU is power-limited to 400 W (below the 5090's 575 W stock), so these numbers are a floor for an unbounded card:
 
 | metric | ninfer (Qwen3.8-27B nvfp4, MTP3) |
 |---|---|
