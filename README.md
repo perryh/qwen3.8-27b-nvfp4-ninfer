@@ -14,7 +14,7 @@ coding use: high concurrency lanes, long context, preserved reasoning.
 |---|---|---|
 | Context per request | **262,144** | model's full window (`--max-context`) |
 | Shared KV pool | **auto** (maximized from free VRAM) | `--kv-capacity auto` |
-| Concurrency | **8 lanes** | Hermes parallel tool calls / coding agents |
+| Concurrency | **4 lanes** (8 doesn't fit at 262K on 32GB) | Hermes parallel tool calls / coding agents |
 | KV dtype | `fp8` | halves KV bytes vs bf16, negligible quality delta |
 | Speculative | `--spec mtp --draft-tokens 3 --lm-head-draft` | MTP3, published ~49% acceptance |
 | Device checkpoint slots | 2 extra | prefix reuse across agent turns |
@@ -60,7 +60,7 @@ curl http://localhost:8080/v1/chat/completions \
 | `PORT` | `8080` | host port |
 | `MODEL_FILE` | `/models/qwen3_8_27b_nvfp4.ninfer` | artifact path in-container |
 | `MAX_CONTEXT` | `262144` | per-request context ceiling |
-| `MAX_CONCURRENCY` | `8` | active-request lanes (NInfer max 8) |
+| `MAX_CONCURRENCY` | `4` | active-request lanes (NInfer allows up to 8; 8 OOMs at 262K on 32GB) |
 | `KV_CAPACITY` | `auto` | shared KV pool (`auto` = maximize from free VRAM) |
 | `KV_DTYPE` | `fp8` | KV storage type |
 | `EXTRA_ARGS` | `--device-state-slots 2 --host-state-slots 8 --host-kv-mib 8192 --spec mtp --draft-tokens 3 --lm-head-draft --preserve-thinking` | passthrough |
