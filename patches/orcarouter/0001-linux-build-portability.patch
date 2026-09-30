@@ -1,0 +1,55 @@
+Linux/gcc build fixes for the published OrcaRouter fork revision
+(igorls/ninfer @ 91ce2f2c).
+
+The revision's only qualified toolchain is MSVC + CUDA 13.3; three constructs
+in its qwen3_8_flash_next (Flash-Next) target do not build under Linux/gcc:
+its sources use std::max over an initializer_list without <algorithm>, alignas
+on an `extern __shared__` declaration, and checked_add/checked_mul calls that
+deduce T from both arguments (only valid where size_t is unsigned long long).
+
+The variant builds with CUDA 13.3.1 for a separate reason: the same target
+includes <cub/device/device_topk.cuh>, which only exists in CCCL as shipped
+with CUDA 13.3 (13.1 has no such header at all).
+
+--- a/src/targets/qwen3_8_flash_next/impl/gdn.cpp
++++ b/src/targets/qwen3_8_flash_next/impl/gdn.cpp
+@@ -1,5 +1,7 @@
+ #include "targets/qwen3_8_flash_next/impl/gdn.h"
+ 
++#include <algorithm>
++
+ #include "ninfer/ops/causal_conv1d_silu.h"
+ #include "ninfer/ops/gated_delta_net.h"
+ #include "ninfer/ops/linear.h"
+--- a/src/targets/qwen3_8_flash_next/impl/moe_kernels.cu
++++ b/src/targets/qwen3_8_flash_next/impl/moe_kernels.cu
+@@ -710,7 +710,7 @@
+     const int warp_n = warp & 1;  // 0 or 1 (tokens 0..7 or tokens 8..15)
+     const int lane   = tid & 31;
+ 
+-    extern __shared__ alignas(16) std::uint8_t s_dyn_mem[];
++    extern __shared__ __align__(16) std::uint8_t s_dyn_mem[];
+     auto* s_w_codes    = s_dyn_mem;                          // 32 * 1280 = 40960 bytes
+     auto* s_w_scales   = s_dyn_mem + 40960;                  // 32 * 164 = 5248 bytes
+     auto* s_a_codes_0  = s_dyn_mem + 40960 + 5248;           // 16 * 1280 = 20480 bytes
+--- a/src/targets/qwen3_8_flash_next/impl/runtime_plan.cpp
++++ b/src/targets/qwen3_8_flash_next/impl/runtime_plan.cpp
+@@ -126,7 +126,8 @@
+                                     (config.speculative_draft_tokens > 0 ? 1ULL : 0ULL);
+ 
+     recurrent_state_bytes = checked_add(
+-        checked_add(checked_mul(36ULL, single_gdn_conv), checked_mul(36ULL, single_gdn_ssm)),
++        checked_add(checked_mul<std::size_t>(36U, single_gdn_conv),
++                    checked_mul<std::size_t>(36U, single_gdn_ssm)),
+         checked_add(ple_conv, checked_add(checked_mul(cache_layers, single_raw_keys),
+                                           checked_mul(cache_layers, single_raw_pos))));
+     if (config.speculative_draft_tokens > 0) {
+@@ -157,7 +158,7 @@
+     if (config.speculative_draft_tokens > 0) {
+         const auto rows = config.proposal_head == ProposalHead::Optimized
+                               ? config.draft_head_rows : 248'320U;
+-        round_tensors_bytes = checked_add(round_tensors_bytes,
++        round_tensors_bytes = checked_add<std::size_t>(round_tensors_bytes,
+             checked_align_up_256(2'560ULL * sizeof(std::uint16_t)) +
+             checked_align_up_256(10'240ULL * sizeof(std::uint16_t)) +
+             checked_align_up_256(rows * sizeof(std::uint16_t)) + 256ULL +

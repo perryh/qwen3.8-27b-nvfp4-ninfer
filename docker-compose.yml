@@ -5,6 +5,7 @@ services:
       args:
         SRC_DIR: ${SRC_DIR:-ninfer-src}
         CMAKE_EXTRA_ARGS: ${CMAKE_EXTRA_ARGS:-}
+        CUDA_VERSION: ${CUDA_VERSION:-13.1.2}
     image: ${IMAGE_TAG:-ninfer-qwen38-27b-nvfp4:latest}
     container_name: ${CONTAINER_NAME:-ninfer}
     restart: unless-stopped

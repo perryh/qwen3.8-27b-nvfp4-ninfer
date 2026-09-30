@@ -4,10 +4,12 @@
 #
 # run.sh stages the variant's engine source (content only, no .git) into the
 # build context; SRC_DIR selects which staged tree to copy so the default and
-# OrcaRouter variants can coexist in one working tree.
+# OrcaRouter variants can coexist in one working tree. CUDA_VERSION follows the
+# variant: upstream is qualified on 13.1, the OrcaRouter artifact on 13.3.
 ARG SRC_DIR=ninfer-src
+ARG CUDA_VERSION=13.1.2
 
-FROM nvidia/cuda:13.1.2-devel-ubuntu24.04 AS build
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04 AS build
 
 ARG SRC_DIR
 ARG CMAKE_EXTRA_ARGS
@@ -35,7 +37,7 @@ RUN cmake -S . -B /build -G Ninja \
         ${CMAKE_EXTRA_ARGS:-} \
     && cmake --build /build --parallel --target ninfer ninfer-serve
 
-FROM nvidia/cuda:13.1.2-runtime-ubuntu24.04
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
