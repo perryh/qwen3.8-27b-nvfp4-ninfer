@@ -72,14 +72,36 @@ the older images.
 
 | Setting | Value | Why |
 |---|---|---|
-| Context per request | **131,072** | largest verified here; the vendor's own example used 32K |
-| Shared KV pool | **131,072 tokens** (`--kv-capacity`) | explicit; `auto` resolves to 203,840 and leaves only 1.2 GiB free |
-| Concurrency | **2 lanes** | the 26 GB artifact leaves ~8.8 GiB after weights |
-| KV dtype | `fp8` | as above |
-| Speculative | `--spec mtp --draft-tokens 5 --lm-head-draft` | MTP K5, the card's recommended pair |
+| Context per request | **262,144** | same window as the default variant |
+| Shared KV pool | **262,144 tokens** (`--kv-capacity`) | explicit, *not* `auto`: see the admission bug below |
+| Concurrency | **2 lanes** | 4 crashed the engine (below); 2 held three full test rounds |
+| KV dtype | `nvfp4` | at 262K an fp8 pool alone needs 9.66 GiB and the artifact leaves 8.77 GiB after weights; k8v4 misses by ~2 MB |
+| Speculative | `--spec mtp --draft-tokens 3 --lm-head-draft` | MTP3, same as the default variant |
 | Desktop reserve | `--desktop-reserve-gib 0` | the fork defaults to an 8 GiB floor, which cannot fit a 26 GB artifact on a 32 GB card |
 | Prefill chunk | `--prefill-chunk 2048` | card's launch example |
 | Thinking | preserved | as above |
+
+### Two engine bugs to know about (fork revision `91ce2f2c`)
+
+1. **Admission crash when the pool is oversubscribed.** With an `auto` pool
+   (which sizes to 5,293 page groups / 338,752 tokens, *more* than the 4,096
+   groups one 262K sequence needs) the engine dies mid-request with
+   `fatal executor failure (St11logic_error: isolated-feasible request is
+   blocked in an idle Engine)`. Reproduced with `bench_tagged.py` (a 70K prefill
+   followed by a distinct 72K generation) at `MAX_CONCURRENCY=4`; the same
+   config with an explicit `--kv-capacity 262144` also crashed at 4 lanes. At 2
+   lanes with an explicit 262,144-token pool (exactly one full-context sequence)
+   the reproduction, run three times, produced no crash. This is why the pool is
+   explicit and concurrency is 2.
+2. **`--clamp-concurrency-to-pool` cannot start.** It clamps the effective
+   concurrency but the auto-sizer still picks the pre-clamp page count, so
+   startup fails with `Main KV page count N is outside the target capacity curve
+   [4096, 4096]`. With an explicit `--kv-capacity` it fails the other way (the
+   clamp demands full backing for the configured lanes, i.e. 8,192 groups).
+   Leave the flag off.
+
+Neither bug is present in the engine the default variant runs, so the default
+variant keeps its `auto` pool and 4 lanes.
 
 Artifact — [igorls/Qwen3.8-27B-Uncensored-NVFP4-NInfer](https://huggingface.co/igorls/Qwen3.8-27B-Uncensored-NVFP4-NInfer):
 
@@ -110,7 +132,11 @@ in practice, so this repo carries the Linux fixes:
 Upstream and the fork's current `workstation` line have **no** OrcaRouter
 support (`git grep -i orcarouter` on `Neroued/ninfer` master: no hits; the
 fork's `workstation` head no longer registers the identity), so the pinned
-revision is required — it cannot ride the newer engine.
+revision is required — it cannot ride the newer engine. Serving this artifact on
+the upstream engine is also blocked: upstream's `tools/upgrade_ninfer_v2_to_v3.py`
+has an allow-list of known models and rejects this container with
+`unsupported v2 input ('qwen3.8-27b-orcarouter', 'nvfp4') with 1190 objects`, so
+the artifact stays v2 and only the fork revision can load it.
 
 Vendor qualification, for orientation: RTX PRO 6000 Blackwell 96 GB on native
 Windows, CUDA 13.3, ordinary/MTP/DFlash2 decode plus image, JSON-schema and
