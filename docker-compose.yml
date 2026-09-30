@@ -13,6 +13,9 @@ services:
       - "${HOST_PORT:-8080}:8080"
     environment:
       - MODEL_FILE=${MODEL_FILE:-/models/qwen3_8_27b_nvfp4.v3.ninfer}
+      # --model-id, so a variant can advertise the same alias as its sibling
+      # (the engine otherwise serves only the artifact's own identity)
+      - MODEL_ID=${MODEL_ID:-}
       - PORT=8080
       - HOST=0.0.0.0
       - MAX_CONTEXT=${MAX_CONTEXT:-262144}

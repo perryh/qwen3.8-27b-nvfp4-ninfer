@@ -3,6 +3,7 @@
 set -euo pipefail
 
 MODEL_FILE="${MODEL_FILE:-/models/qwen3_8_27b_nvfp4.ninfer}"
+MODEL_ID="${MODEL_ID:-}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8080}"
 MAX_CONTEXT="${MAX_CONTEXT:-262144}"
@@ -16,6 +17,10 @@ ARGS=("$MODEL_FILE" --host "$HOST" --port "$PORT"
       --kv-capacity "$KV_CAPACITY"
       --max-concurrency "$MAX_CONCURRENCY"
       --kv-dtype "$KV_DTYPE")
+
+if [ -n "$MODEL_ID" ]; then
+  ARGS+=(--model-id "$MODEL_ID")
+fi
 
 # Optional flags pass-through (word-split intentionally)
 if [ -n "$EXTRA_ARGS" ]; then
