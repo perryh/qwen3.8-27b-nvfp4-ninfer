@@ -5,10 +5,14 @@
 # stage, which artifact to serve, the image/container names and the serving
 # profile. Only one variant can hold the GPU at a time.
 #
-#   VARIANT=default     Qwen3.8-27B NVFP4, upstream NInfer, v3 artifact   :8080
-#   VARIANT=orcarouter  Qwen3.8-27B Uncensored NVFP4 (OrcaRouter), fork   :8081
+#   VARIANT=default     Qwen3.8-27B NVFP4, upstream NInfer, v3 artifact
+#   VARIANT=orcarouter  Qwen3.8-27B Uncensored NVFP4 (OrcaRouter), fork
 #
-# usage: [VARIANT=<name>] ./run.sh [up|test|logs|stop]
+# Both variants publish the SAME port (8080) and the same model alias, so a
+# single agent profile works whichever model is loaded. Only one can hold the
+# GPU at a time, so `up` stops the other variant first.
+#
+# usage: [VARIANT=<name>] ./run.sh [up|test|logs|status|stop]
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
@@ -82,8 +86,27 @@ stage_source() {
   apply_patches
 }
 
+# Both variants publish the same port, so a second one cannot start while the
+# first still holds it (the engine would exit on bind failure). `up` stops the
+# others first: switching models is one command, not a stop plus a start.
+stop_others() {
+  local f other proj name
+  for f in variants/*.env; do
+    other="$(basename "$f" .env)"
+    [ "$other" = "$VARIANT" ] && continue
+    proj="$(sed -n 's/^COMPOSE_PROJECT=//p' "$f" | head -1)"
+    name="$(sed -n 's/^CONTAINER_NAME=//p' "$f" | head -1)"
+    [ -n "$proj" ] && [ -n "$name" ] || continue
+    if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+      echo ">> stopping ${other}: ${name} holds port :${HOST_PORT}, one model at a time"
+      docker compose -p "$proj" down >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 case "${1:-up}" in
   up)
+    stop_others
     stage_source
     compose up -d --build
     echo ">> waiting for health on :${HOST_PORT} ..."
@@ -111,7 +134,22 @@ case "${1:-up}" in
   stop)
     compose down
     ;;
+  status)
+    echo "== variants (one at a time, same port) =="
+    for f in variants/*.env; do
+      v="$(basename "$f" .env)"
+      printf '   %-11s :%-5s model %-22s CUDA %s\n' "$v" \
+        "$(sed -n 's/^HOST_PORT=//p' "$f" | head -1)" \
+        "$(sed -n 's/^MODEL_ID=//p' "$f" | head -1)" \
+        "$(sed -n 's/^CUDA_VERSION=//p' "$f" | head -1)"
+    done
+    echo "== containers =="
+    docker ps -a --format '{{.Names}}\t{{.Status}}' | grep ninfer || echo "   (none)"
+    echo "== :${HOST_PORT} =="
+    curl -sf "http://localhost:${HOST_PORT}/v1/models" || echo "   (nothing answering)"
+    echo
+    ;;
   *)
-    echo "usage: [VARIANT=<name>] ./run.sh [up|test|logs|stop]"; exit 2
+    echo "usage: [VARIANT=<name>] ./run.sh [up|test|logs|status|stop]"; exit 2
     ;;
 esac
