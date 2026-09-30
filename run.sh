@@ -19,8 +19,22 @@ if [ ! -f "$VARIANT_FILE" ]; then
   echo ">> unknown variant '${VARIANT}'; available: $(cd variants && ls *.env | sed 's/\.env$//' | tr '\n' ' ')" >&2
   exit 2
 fi
+# Every knob a variant defines; an explicit environment override wins over the
+# variant file (capture before sourcing, re-apply after).
+VARIANT_KEYS="SRC_DIR NINFER_SRC IMAGE_TAG CONTAINER_NAME COMPOSE_PROJECT MODEL_FILE \
+MODEL_ID MAX_CONTEXT KV_CAPACITY MAX_CONCURRENCY KV_DTYPE EXTRA_ARGS HOST_PORT \
+CMAKE_EXTRA_ARGS CUDA_VERSION"
+
+OVERRIDES=""
+for key in $VARIANT_KEYS; do
+  if [ -n "${!key+x}" ]; then
+    OVERRIDES+="$(printf '%s=%q; ' "$key" "${!key}")"
+  fi
+done
+
 # shellcheck disable=SC1090
 set -a; . "$VARIANT_FILE"; set +a
+[ -n "$OVERRIDES" ] && eval "$OVERRIDES"
 
 for required in SRC_DIR NINFER_SRC IMAGE_TAG CONTAINER_NAME COMPOSE_PROJECT \
                 MODEL_FILE MODEL_ID MAX_CONTEXT KV_CAPACITY MAX_CONCURRENCY \
