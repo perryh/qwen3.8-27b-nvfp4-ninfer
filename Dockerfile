@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1
-# Two-stage build of NInfer from the pinned upstream checkout (mirrors
+# Two-stage build of NInfer from a staged engine checkout (mirrors
 # https://github.com/Neroued/ninfer Dockerfile: CUDA 13.1 devel -> runtime).
-ARG NINFER_SRC=../ninfer
+#
+# run.sh stages the variant's engine source (content only, no .git) into the
+# build context; SRC_DIR selects which staged tree to copy so the default and
+# OrcaRouter variants can coexist in one working tree.
+ARG SRC_DIR=ninfer-src
 
 FROM nvidia/cuda:13.1.2-devel-ubuntu24.04 AS build
 
+ARG SRC_DIR
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
@@ -19,7 +24,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-COPY ninfer-src/ .
+COPY ${SRC_DIR}/ .
 
 RUN cmake -S . -B /build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
