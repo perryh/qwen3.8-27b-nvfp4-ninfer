@@ -4,6 +4,7 @@ services:
       context: .
       args:
         SRC_DIR: ${SRC_DIR:-ninfer-src}
+        CMAKE_EXTRA_ARGS: ${CMAKE_EXTRA_ARGS:-}
     image: ${IMAGE_TAG:-ninfer-qwen38-27b-nvfp4:latest}
     container_name: ${CONTAINER_NAME:-ninfer}
     restart: unless-stopped

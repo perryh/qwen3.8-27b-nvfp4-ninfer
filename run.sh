@@ -27,10 +27,27 @@ for required in SRC_DIR NINFER_SRC IMAGE_TAG CONTAINER_NAME COMPOSE_PROJECT \
                 KV_DTYPE EXTRA_ARGS HOST_PORT; do
   [ -n "${!required:-}" ] || { echo ">> ${VARIANT_FILE} must define ${required}" >&2; exit 2; }
 done
+CMAKE_EXTRA_ARGS="${CMAKE_EXTRA_ARGS:-}"
 export SRC_DIR NINFER_SRC IMAGE_TAG CONTAINER_NAME COMPOSE_PROJECT MODEL_FILE \
-       MODEL_ID MAX_CONTEXT KV_CAPACITY MAX_CONCURRENCY KV_DTYPE EXTRA_ARGS HOST_PORT
+       MODEL_ID MAX_CONTEXT KV_CAPACITY MAX_CONCURRENCY KV_DTYPE EXTRA_ARGS HOST_PORT \
+       CMAKE_EXTRA_ARGS
 
 compose() { docker compose -p "$COMPOSE_PROJECT" "$@"; }
+
+# Variant patches for staged engine sources that need them (kept in-repo so the
+# exact build is reproducible). Applied right after staging, skipped when the
+# stage already exists.
+apply_patches() {
+  local dir="patches/${VARIANT}"
+  [ -d "$dir" ] || return 0
+  local p
+  for p in "${dir}"/*.patch; do
+    [ -e "$p" ] || continue
+    echo ">> applying $(basename "$p")"
+    patch -p1 -d "${ROOT}/${SRC_DIR}" --forward --silent < "$p" \
+      || { echo ">> failed to apply $p" >&2; exit 1; }
+  done
+}
 
 # Stage the variant's engine checkout into the build context (content only, no
 # .git). Skips when already staged unless NINFER_REFRESH=1.
@@ -47,6 +64,7 @@ stage_source() {
     echo ">> ${NINFER_SRC} is not a git checkout; cloning upstream into ${SRC_DIR}"
     git clone --depth 1 https://github.com/Neroued/ninfer.git "${ROOT}/${SRC_DIR}"
   fi
+  apply_patches
 }
 
 case "${1:-up}" in

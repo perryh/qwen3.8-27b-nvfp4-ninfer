@@ -1,0 +1,43 @@
+Linux build fix for the published OrcaRouter fork revision (igorls/ninfer
+@ 91ce2f2c).
+
+That revision builds under MSVC (the revision's only qualified toolchain) but
+not under Linux/gcc+CUDA 13.1: the qwen3_8_flash_next (Flash-Next) target has
+an MSVC-only source set — a missing <algorithm> include, `alignas` on
+`extern __shared__`, `cub/device/device_topk.cuh`, and `checked_mul/checked_add`
+calls that only resolve where size_t is unsigned long long. The target serves
+Flash-Next models and is not used by the 27B OrcaRouter artifact, so this patch
+puts it behind a build option instead of repairing foreign sources; the
+orcarouter variant's CMAKE_EXTRA_ARGS sets it OFF.
+
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -375,7 +375,11 @@
+ # One cold closed registry plus the opaque public product Engine. Family and exact-target
+ # directories contribute their sources directly to this compile owner below.
+ add_subdirectory(targets/qwen3_vision)
+-add_subdirectory(targets/qwen3_8_flash_next)
++option(NINFER_WITH_FLASH_NEXT
++  "Build the Flash-Next target (MSVC-only sources at revision 91ce2f2c)" ON)
++if(NINFER_WITH_FLASH_NEXT)
++  add_subdirectory(targets/qwen3_8_flash_next)
++endif()
+ 
+ add_library(ninfer_engine STATIC
+   targets/registry.cpp
+@@ -391,12 +395,14 @@
+ target_link_libraries(ninfer_engine
+   PRIVATE
+     ninfer_qwen3_vision
+-    ninfer_qwen3_8_flash_next
+     ninfer_artifact
+     ninfer_core
+     ninfer_ops
+     ninfer_text
+     ninfer_media_decode)
++if(NINFER_WITH_FLASH_NEXT)
++  target_link_libraries(ninfer_engine PRIVATE ninfer_qwen3_8_flash_next)
++endif()
+ add_library(ninfer::engine ALIAS ninfer_engine)
+ 
+ if(NINFER_BUILD_SERVE)
