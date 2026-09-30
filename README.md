@@ -149,24 +149,29 @@ maximum-context operation were **not** done. What this repo adds is our own
 `default` (262K ctx, auto KV, C=4): KV 265,152 tokens fp8, runtime reservation
 10.1 GiB, 1.29 GiB free after startup.
 
-`orcarouter` (131K ctx, 131K KV, C=2): runtime reservation 5.4 GiB,
-available after weights 8.8 GiB, **3.5 GiB free after startup**. With `auto`
-instead of an explicit pool the engine resolves 203,840 tokens and warns
-`KV pool is oversubscribed (77.8% full-context backing)` with 1.2 GiB free —
-that profile boots and serves, but it is not the default here.
+`orcarouter` (262K ctx, explicit 262,144-token KV, C=2, nvfp4 KV): runtime
+reservation 5.88 GiB, available after weights 8.77 GiB, **3.05 GiB free after
+startup**. The pool is exactly one full-context sequence, so `--kv-capacity`
+reports `kv_page_groups=4096 kv_max_page_groups=8192` and `kv_headroom_bytes=0`.
+Sizing this pool with `auto` instead is what crashes the engine (see the
+admission bug above): `auto` picks 5,293 groups, i.e. *more* than one sequence
+and less than two, which is the state the scheduler cannot place a request in.
+For the same reason there is no fp8 profile here: at 262K an fp8 pool alone
+needs 9.66 GiB of the 8.77 GiB available, and `k8v4` misses by about 2 MB.
 
 ## Benchmarks
 
 All on this box, 400 W power limit (the 5090's stock limit is 575 W, so every
-number is a floor), fp8 KV, CUDA graphs on, nothing else on the GPU.
+number is a floor), CUDA graphs on, nothing else on the GPU; fp8 KV for the
+default variant, nvfp4 KV for orcarouter (forced, see its profile above).
 
-| metric | default (MTP3, 262K, C=4) | orcarouter (MTP5, 128K, C=2) |
+| metric | default (MTP3, 262K, C=4) | orcarouter (MTP3, 262K, C=2) |
 |---|---|---|
-| decode, prose, thinking off (`bench_decode.py`, 3 samples) | 135.5 / 135.1 / 134.5 tok/s | 143.6 / 144.0 / 143.7 tok/s |
-| decode, 700-token generation (`bench_tagged.py`) | 179.8 tok/s | 193.6 tok/s |
-| prefill @ 6.7K | 8,216 tok/s | 6,993 tok/s |
-| prefill @ 70K | 6,440 tok/s | 4,994 tok/s |
-| long-ctx gen (72.6K prompt, 500 out, net of prefill) | 110.0 tok/s | 106.8 tok/s |
+| decode, prose, thinking off (`bench_decode.py`, 3 samples) | 135.5 / 135.1 / 134.5 tok/s | 141.6 / 141.6 / 141.1 tok/s |
+| decode, 700-token generation (`bench_tagged.py`) | 179.8 tok/s | 160.3 tok/s |
+| prefill @ 6.7K | 8,216 tok/s | 6,778 tok/s |
+| prefill @ 70K | 6,440 tok/s | 4,868 tok/s |
+| long-ctx gen (72.6K prompt, 500 out, net of prefill) | 110.0 tok/s | 107.1 tok/s |
 
 Measured 2026-09-30 against the builds pinned above. Notes that matter when
 re-measuring:
@@ -183,14 +188,16 @@ re-measuring:
 - Warm up once before timing: the first request after start compiles CUDA-graph
   paths.
 
-Also verified on the OrcaRouter stack: two concurrent decodes plus a
-128,062-token prompt served together (36.3 s, ~3.5K tok/s prefill under
-contention) with the container healthy afterwards — the config survives its
-first real batch, not just startup. DFlash2 (`--spec dflash2 --draft-tokens 7
---lm-head-draft`) loads the companion (+1.8 GB weights, 727 tensors) and
-measured 142–157 tok/s on the same prose prompt, i.e. no win over MTP5 here; it
-also drops free VRAM at 131K ctx to 1.9 GiB. MTP5 is the default for that
-reason.
+Also verified on the OrcaRouter stack, on the config above: two concurrent
+decodes plus a 192,062-token prompt served together (70.3 s, ~2.7K tok/s prefill
+under contention, `cached_tokens: 0`), container healthy afterwards, and the
+admission-crash reproduction run three times with no crash. Startup health is
+not the bar for this profile; the batch is.
+
+DFlash2 (`--spec dflash2 --draft-tokens 7 --lm-head-draft`) loads the artifact's
+companion head (+1.8 GB weights, 727 tensors) and, measured under the earlier
+131K/MTP5 profile, gave 142–157 tok/s on the same prose prompt — no win over MTP
+on this card — while dropping free VRAM to 1.9 GiB. It is not used here.
 
 Reference points on the same machine: ik_llama MTP (Qwen3.8-Flash-Next 125B)
 ~21 tok/s decode / ~300 tok/s prefill; FreeToken (same model) 48 tok/s @ 16K
