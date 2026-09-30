@@ -8,10 +8,25 @@ variant, long context, preserved reasoning, MTP/DFlash2 speculative decoding.
 | variant | model | engine | port |
 |---|---|---|---|
 | `default` | Qwen3.8-27B NVFP4 (Neroued) | upstream NInfer @ `d44ab584`, CUDA 13.1.2 | 8080 |
-| `orcarouter` | Qwen3.8-27B **Uncensored** NVFP4 (OrcaRouter, abliterated) | igorls fork @ `91ce2f2c`, CUDA 13.3.1 | 8081 |
+| `orcarouter` | Qwen3.8-27B **Uncensored** NVFP4 (OrcaRouter, abliterated) | igorls fork @ `91ce2f2c`, CUDA 13.3.1 | 8080 |
 
-Both stacks want the whole card, so **only one runs at a time** (`docker ps`
-should show a single `ninfer*` container).
+Both stacks want the whole card and both publish **the same port (8080) and the
+same model alias (`qwen3.8-27b`)**, so one agent profile — base URL plus model
+name — works whichever variant is loaded. Only one runs at a time (`docker ps`
+should show a single `ninfer*` container), and `./run.sh up` stops whichever
+variant is up first, so switching models is one command:
+
+```bash
+VARIANT=orcarouter ./run.sh up   # prints "stopping default: ninfer holds port :8080" when needed
+VARIANT=default ./run.sh up      # and the reverse
+./run.sh status                  # which variant is live, its port, and what :8080 answers
+```
+
+Because the alias is shared, `/v1/models` cannot tell you *which* model is
+loaded — the container name can. `--model-id` replaces the artifact's own
+identity, so the OrcaRouter file answers only as `qwen3.8-27b` (its internal
+`qwen3.8-27b-orcarouter` name is refused once the alias is set). To keep two
+variants on different ports instead, override `HOST_PORT`.
 
 ## Run
 
@@ -26,6 +41,10 @@ VARIANT=orcarouter ./run.sh test
 VARIANT=orcarouter ./run.sh stop
 ```
 
+Don't pipe `./run.sh up` into `head` — the build writes more output than head
+reads, the resulting SIGPIPE kills the script mid-build, and you are left with
+no container at all.
+
 An explicit environment override wins over `variants/<name>.env`, so a one-off
 profile change needs no edit:
 
@@ -33,14 +52,14 @@ profile change needs no edit:
 VARIANT=orcarouter MAX_CONTEXT=32768 KV_CAPACITY=65536 ./run.sh up
 ```
 
-Server on `http://localhost:<port>` — OpenAI `/v1/chat/completions`,
+Server on `http://localhost:8080` — OpenAI `/v1/chat/completions`,
 `/v1/models`, `/v1/responses`; Anthropic `/v1/messages`,
 `/v1/messages/count_tokens`.
 
 ```bash
-curl http://localhost:8081/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"qwen3.8-27b-orcarouter","messages":[{"role":"user","content":"Reply with one short sentence."}],"max_tokens":64}'
+  -d '{"model":"qwen3.8-27b","messages":[{"role":"user","content":"Reply with one short sentence."}],"max_tokens":64}'
 ```
 
 ## Variant: default (Neroued Qwen3.8-27B NVFP4)
@@ -110,7 +129,7 @@ Artifact — [igorls/Qwen3.8-27B-Uncensored-NVFP4-NInfer](https://huggingface.co
 | File | `models/orcarouter/qwen3_8_27b_orcarouter_nvfp4.ninfer` |
 | Size | 26,268,462,848 bytes (24.5 GiB) |
 | SHA-256 (verified on download) | `003f8c65175e262e66f83a803f7b1d286f7226ede0e672d3b3e5c4b6c75f3e7f` |
-| Engine identity | `qwen3.8-27b-orcarouter` / `nvfp4`, target `qwen3_8_27b` |
+| Engine identity | `qwen3.8-27b-orcarouter` / `nvfp4`, target `qwen3_8_27b` (served as the alias `qwen3.8-27b`, like the default variant) |
 | Source model | `orcarouter/Qwen3.8-27B-Uncensored-NVFP4` @ `69d21348` (Apache-2.0) |
 | Companion | `incoai/Qwen3.8-27B-DFlash2` @ `dedf8df6` (Apache-2.0) |
 | Contents | text + Vision + MTP + DFlash2 + optimized proposal head, BF16 embeddings and full output head preserved |

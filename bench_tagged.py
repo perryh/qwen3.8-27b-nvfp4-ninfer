@@ -2,7 +2,7 @@
 """NInfer bench mirroring bench.py, but each long prompt carries a unique tag so
 no phase can reuse another phase's prefix cache.
 
-    BASE=http://host:8081 MODEL=qwen3.8-27b-orcarouter python3 bench_tagged.py
+    BASE=http://host:8080 MODEL=qwen3.8-27b python3 bench_tagged.py
 """
 import json, os, secrets, time, urllib.request
 
